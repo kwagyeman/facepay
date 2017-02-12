@@ -32,6 +32,8 @@ QPixmap AspectRatioPixmapLabel::scaledPixmap() const
 
 void AspectRatioPixmapLabel::resizeEvent(QResizeEvent * e)
 {
+    Q_UNUSED(e)
+
     if(!pix.isNull())
         QLabel::setPixmap(scaledPixmap());
 }
@@ -413,6 +415,24 @@ void MainWindow::log(const QString &text)
 
 void MainWindow::payNow()
 {
+    QRegularExpressionMatch match = QRegularExpression("\\$?(\\d+(\\.\\d+)?)").match(m_ui->total_price_edit->text());
+
+    if(match.captured(1).isEmpty())
+    {
+        QMessageBox::critical(this, QString(), tr("Please enter a valid dollar amount"));
+        return;
+    }
+
+    QString amountValue = match.captured(1);
+    log(QString("%L1 - Amount %L2").arg(QDateTime::currentDateTime().toString()).arg(amountValue));
+
+    if(!amountValue.contains("."))
+    {
+        amountValue.append(".00");
+    }
+
+    log(QString("%L1 - Changed to %L2").arg(QDateTime::currentDateTime().toString()).arg(amountValue));
+
     QNetworkAccessManager *manager0 = new QNetworkAccessManager(this);
 
     connect(manager0, &QNetworkAccessManager::finished, this, [this, manager0] (QNetworkReply *reply0) {
@@ -429,6 +449,17 @@ void MainWindow::payNow()
             if(!json0.isEmpty())
             {
                 log(QString("%L1 - Worldpay charge good json!").arg(QDateTime::currentDateTime().toString()));
+
+                if(json0.object().value("success").toBool())
+                {
+                    QMessageBox::information(this, QString(), tr("Payment Done!"));
+
+                    cancelTransaction();
+                }
+                else
+                {
+                    QMessageBox::critical(this, QString(), tr("Payment token not valid!"));
+                }
             }
             else
             {
@@ -448,14 +479,12 @@ void MainWindow::payNow()
         manager0->deleteLater();
     });
 
-    QString value = m_ui->total_price_edit->text().remove("$");
-    if(value.isEmpty()) value = "0.00";
-
     QJsonObject outObject;
-    outObject.insert("amount", value);
+    outObject.insert("amount", match.captured(1));
     QJsonObject subObject0;
-    subObject0.insert("paymentMethodId", m_userData);
-    subObject0.insert("publicKey", WORLDPAY_KEY);
+    subObject0.insert("paymentMethodId", "1");
+    subObject0.insert("customerId", m_userData);
+    subObject0.insert("paymentType", "CREDIT_CARD");
     outObject.insert("paymentVaultToken", subObject0);
     QJsonObject subObject1;
     subObject1.insert("developerId", "12345678");
