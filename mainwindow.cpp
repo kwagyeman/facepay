@@ -1,6 +1,41 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+AspectRatioPixmapLabel::AspectRatioPixmapLabel(QWidget *parent) :
+    QLabel(parent)
+{
+    this->setMinimumSize(600/3,400/3);
+    setScaledContents(false);
+}
+
+void AspectRatioPixmapLabel::setPixmap ( const QPixmap & p)
+{
+    pix = p;
+    QLabel::setPixmap(scaledPixmap());
+}
+
+int AspectRatioPixmapLabel::heightForWidth( int width ) const
+{
+    return pix.isNull() ? this->height() : ((qreal)pix.height()*width)/pix.width();
+}
+
+QSize AspectRatioPixmapLabel::sizeHint() const
+{
+    int w = this->width();
+    return QSize( w, heightForWidth(w) );
+}
+
+QPixmap AspectRatioPixmapLabel::scaledPixmap() const
+{
+    return pix.scaled(this->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
+void AspectRatioPixmapLabel::resizeEvent(QResizeEvent * e)
+{
+    if(!pix.isNull())
+        QLabel::setPixmap(scaledPixmap());
+}
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_timer(nullptr), m_ui(new Ui::MainWindow)
 {
     QApplication::setApplicationDisplayName(tr("Wink"));
@@ -11,7 +46,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_timer(nullptr),
     QApplication::setWindowIcon(QIcon("://FullResSquareLogo.png"));
 
     m_ui->setupUi(this);
-    m_ui->logo->setPixmap(QPixmap("://Sxkq4ox.png"));
+    AspectRatioPixmapLabel *label = new AspectRatioPixmapLabel();
+    label->setPixmap(QPixmap("://Sxkq4ox.png"));
+    m_ui->horizontalLayout_2->insertWidget(0, label);
+    delete m_ui->logo;
 
     QLoggingCategory::setFilterRules(QStringLiteral("qt.network.ssl.warning=false")); // http://stackoverflow.com/questions/26361145/qsslsocket-error-when-ssl-is-not-used
 
@@ -361,6 +399,11 @@ void MainWindow::showEvent(QShowEvent *event)
     QMainWindow::showEvent(event);
 }
 
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+}
+
 void MainWindow::log(const QString &text)
 {
     m_ui->console->appendPlainText(text);
@@ -370,54 +413,72 @@ void MainWindow::log(const QString &text)
 
 void MainWindow::payNow()
 {
-//    QNetworkAccessManager *manager0 = new QNetworkAccessManager(this);
+    QNetworkAccessManager *manager0 = new QNetworkAccessManager(this);
 
-//    connect(manager0, &QNetworkAccessManager::finished, this, [this, manager0] (QNetworkReply *reply0) {
+    connect(manager0, &QNetworkAccessManager::finished, this, [this, manager0] (QNetworkReply *reply0) {
 
-//        QByteArray data0 = reply0->readAll();
-//        log(QString("%L1 - Firebase get got %L2").arg(QDateTime::currentDateTime().toString()).arg(QString::fromLatin1(data0)));
+        QByteArray data0 = reply0->readAll();
+        log(QString("%L1 - Worldpay charge got %L2").arg(QDateTime::currentDateTime().toString()).arg(QString::fromLatin1(data0)));
 
-//        if((reply0->error() == QNetworkReply::NoError) && (!data0.isEmpty()))
-//        {
-//            log(QString("%L1 - Firebase get response passed!").arg(QDateTime::currentDateTime().toString()));
+        if((reply0->error() == QNetworkReply::NoError) && (!data0.isEmpty()))
+        {
+            log(QString("%L1 - Worldpay charge response passed!").arg(QDateTime::currentDateTime().toString()));
 
-//            QJsonDocument json0 = QJsonDocument::fromJson(data0);
+            QJsonDocument json0 = QJsonDocument::fromJson(data0);
 
-//            if(!json0.isEmpty())
-//            {
-//                log(QString("%L1 - Firebase get good json!").arg(QDateTime::currentDateTime().toString()));
-//            }
-//            else
-//            {
-//                log(QString("%L1 - Firebase get bad json!").arg(QDateTime::currentDateTime().toString()));
+            if(!json0.isEmpty())
+            {
+                log(QString("%L1 - Worldpay charge good json!").arg(QDateTime::currentDateTime().toString()));
+            }
+            else
+            {
+                log(QString("%L1 - Worldpay charge bad json!").arg(QDateTime::currentDateTime().toString()));
 
-//                QMessageBox::critical(this, QString(), tr("User data not found!"));
-//            }
-//        }
-//        else
-//        {
-//            log(QString("%L1 - Detect reply response failed!").arg(QDateTime::currentDateTime().toString()));
+                QMessageBox::critical(this, QString(), tr("Charge Failed!"));
+            }
+        }
+        else
+        {
+            log(QString("%L1 - Worldpay charge failed!").arg(QDateTime::currentDateTime().toString()));
 
-//            QMessageBox::critical(this, QString(), tr("User data not found!"));
-//        }
+            QMessageBox::critical(this, QString(), tr("Charge Failed!"));
+        }
 
-//        reply0->deleteLater();
-//        manager0->deleteLater();
-//    });
+        reply0->deleteLater();
+        manager0->deleteLater();
+    });
 
-//    QNetworkRequest request0 = QNetworkRequest(QUrl("https://fintackhack2017.firebaseio.com/users/" + m_userData + ".json?auth=" FIREBASE_KEY));
-//    request0.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
-//    QNetworkReply *reply0 = manager0->get(request0);
-//    log(QString("%L1 - Sending URL %L2").arg(QDateTime::currentDateTime().toString()).arg(request0.url().toString()));
+    QString value = m_ui->total_price_edit->text().remove("$");
+    if(value.isEmpty()) value = "0.00";
 
-//    if(!reply0)
-//    {
-//        log(QString("%L1 - Firebase get send failed!").arg(QDateTime::currentDateTime().toString())); manager0->deleteLater();
+    QJsonObject outObject;
+    outObject.insert("amount", value);
+    QJsonObject subObject0;
+    subObject0.insert("paymentMethodId", m_userData);
+    subObject0.insert("publicKey", WORLDPAY_KEY);
+    outObject.insert("paymentVaultToken", subObject0);
+    QJsonObject subObject1;
+    subObject1.insert("developerId", "12345678");
+    subObject1.insert("version", "1.2");
+    outObject.insert("developerApplication", subObject1);
 
-//        QMessageBox::critical(this, QString(), tr("Network Error!"));
-//    }
-//    else
-//    {
-//        log(QString("%L1 - Firebase get send passed!").arg(QDateTime::currentDateTime().toString()));
-//    }
+    QByteArray outData = QJsonDocument(outObject).toJson();
+    log(QString("%L1 - Sending JSON %L2").arg(QDateTime::currentDateTime().toString()).arg(QString::fromLatin1(outData)));
+
+    QNetworkRequest request0 = QNetworkRequest(QUrl("https://gwapi.demo.securenet.com/api/Payments/Charge"));
+    request0.setAttribute(QNetworkRequest::FollowRedirectsAttribute, true);
+    request0.setRawHeader("Content-Type", "application/json");
+    request0.setRawHeader("Authorization", "Basic ODAwODkyNzpyY09PMEEvS2ZXckM=");
+    QNetworkReply *reply0 = manager0->post(request0, outData);
+
+    if(!reply0)
+    {
+        log(QString("%L1 - Worldpay charge failed!").arg(QDateTime::currentDateTime().toString())); manager0->deleteLater();
+
+        QMessageBox::critical(this, QString(), tr("Network Error!"));
+    }
+    else
+    {
+        log(QString("%L1 - Worldpay charge passed!").arg(QDateTime::currentDateTime().toString()));
+    }
 }

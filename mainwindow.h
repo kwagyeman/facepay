@@ -10,12 +10,28 @@
 
 #define MICROSOFT_KEY "e5bdbaf52816430bb3ff0ef29850855f"
 #define MICROSOFT_GROUP "facepay"
-#define WOLRPAY_KEY "xxx"
+#define WORLDPAY_KEY "93836c33-2ad2-4598-bd41-b91e3a19e81d"
 
 namespace Ui
 {
     class MainWindow;
 }
+
+class AspectRatioPixmapLabel : public QLabel
+{
+    Q_OBJECT
+public:
+    explicit AspectRatioPixmapLabel(QWidget *parent = 0);
+    virtual ~AspectRatioPixmapLabel() {}
+    virtual int heightForWidth( int width ) const;
+    virtual QSize sizeHint() const;
+    QPixmap scaledPixmap() const;
+public slots:
+    void setPixmap ( const QPixmap & );
+    void resizeEvent(QResizeEvent *);
+private:
+    QPixmap pix;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -37,6 +53,7 @@ public slots:
 protected:
 
     void showEvent(QShowEvent *event);
+    void resizeEvent(QResizeEvent *event);
 
 private:
 
